@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/check-tenancy — the security-grade one. Tenancy scoping IS the
+# authorization mechanism in this codebase: controllers reach data via
+# current_organization.… / current_project.…, so an unscoped
+# `Checks::Run.find(params[:id])` isn't a style problem, it's a
+# cross-tenant data leak. This flags constant-receiver query calls in
+# controllers; models and interactions are exempt because they receive
+# already-scoped records from their callers.
+#
+# Escape hatch: `hb:allow` on the line or the line above — required for
+# the pre-auth entry points (login's User.find_by, token authentication)
+# where no tenant exists yet. The pragma doubles as documentation that
+# somebody thought about it.
+
+UNSCOPED_QUERY = /\b[A-Z][\w:]*\.(?:find|find_by!?|find_each|where|all|first|last|sole)\b/
+
+files = Dir.glob("app/controllers/**/*.rb") +
+        Dir.glob("engines/*/app/controllers/**/*.rb")
+
+offenses = []
+
+# The pragma counts anywhere in the contiguous comment block above the
+# line — tenancy exceptions deserve multi-line justifications, and the
+# pragma shouldn't have to crowd onto the last line of one.
+def allowed?(lines, index)
+  return true if lines[index].include?("hb:allow")
+
+  cursor = index - 1
+  while cursor >= 0 && lines[cursor].lstrip.start_with?("#")
+    return true if lines[cursor].include?("hb:allow")
+
+    cursor -= 1
+  end
+  false
+end
+
+files.sort.each do |path|
+  lines = File.read(path, encoding: "UTF-8").lines
+  lines.each_with_index do |line, index|
+    next if allowed?(lines, index)
+    next if line.lstrip.start_with?("#")
+
+    if line.match?(UNSCOPED_QUERY)
+      offenses << [ path, index + 1,
+                    "unscoped query — start from current_organization/current_project (or hb:allow with a reason)" ]
+    end
+  end
+end
+
+offenses.each { |file, line, message| puts "#{file}:#{line}: #{message}" }
+puts "#{offenses.size} offense(s)"
+exit(offenses.empty? ? 0 : 1)

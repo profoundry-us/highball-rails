@@ -1,0 +1,31 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/check-gem-comments — every gem line in the Gemfile needs a comment
+# above (or trailing) saying WHY the dependency exists. The house
+# Gemfiles already read this way; this keeps agents from slipping in a
+# bare `gem "something"` whose reason evaporates by next month. The
+# comment's QUALITY is the AI rubric's problem; presence is ours.
+
+lines = File.read("Gemfile", encoding: "UTF-8").lines
+
+offenses = []
+previous_meaningful = nil
+
+lines.each_with_index do |line, index|
+  stripped = line.strip
+  next if stripped.empty?
+
+  if stripped.start_with?("gem ") && !stripped.include?("#") &&
+     !(previous_meaningful&.start_with?("#"))
+    offenses << [ index + 1, stripped[/gem\s+["'][^"']+["']/] || stripped ]
+  end
+
+  previous_meaningful = stripped
+end
+
+offenses.each do |line, gem_line|
+  puts "Gemfile:#{line}: #{gem_line} has no explanatory comment above it"
+end
+puts "#{offenses.size} offense(s)"
+exit(offenses.empty? ? 0 : 1)

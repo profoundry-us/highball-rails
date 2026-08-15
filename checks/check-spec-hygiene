@@ -1,0 +1,46 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/check-spec-hygiene — no focused specs make it past a turn: a
+# committed fit/fdescribe/:focus silently shrinks the suite to one
+# example and everything else "passes" by not running. Cheap full scan;
+# no changed-only mode because a focus anywhere poisons every run.
+#
+# Escape hatch: `hb:allow` on the line or the line above (hard to imagine
+# needing it, which is rather the point).
+#
+# The DSL forms are anchored to the start of a statement on purpose. A bare
+# /\bfit\b/ also matches the English word in a description or an expectation
+# ("renders the canvas-fit toggle", `include("Canvas fit")`), which is a false
+# positive in any repo whose domain language contains "fit" — and a rule that
+# cries wolf on prose is a rule people start ignoring. `fit`/`fdescribe`/
+# `fcontext` are only ever RSpec when they open a statement.
+#
+# The optional RSpec. prefix matters more than it looks: every spec file here
+# opens `RSpec.describe`, so `RSpec.fdescribe` is the natural way to focus a
+# whole file — and a miss here is worse than any false positive, because the
+# suite then "passes" by not running.
+FOCUS_DSL      = /^\s*(?:RSpec\.)?(?:fit|fdescribe|fcontext)[\s(]/
+# Metadata forms: `it "…", :focus do` and `describe "…", focus: true do`.
+# The leading alternation also catches metadata carried onto its own line
+# when a long description wraps.
+FOCUS_METADATA = /(?:,|^)\s*:focus\b|\bfocus:\s*true\b/
+
+offenses = []
+
+Dir.glob("spec/**/*_spec.rb").sort.each do |path|
+  lines = File.read(path, encoding: "UTF-8").lines
+  lines.each_with_index do |line, index|
+    next if line.include?("hb:allow")
+    next if index.positive? && lines[index - 1].include?("hb:allow")
+    next if line.lstrip.start_with?("#")
+
+    if line.match?(FOCUS_DSL) || line.match?(FOCUS_METADATA)
+      offenses << [ path, index + 1, "focused spec — the rest of the suite isn't running" ]
+    end
+  end
+end
+
+offenses.each { |file, line, message| puts "#{file}:#{line}: #{message}" }
+puts "#{offenses.size} offense(s)"
+exit(offenses.empty? ? 0 : 1)

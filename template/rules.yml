@@ -1,0 +1,96 @@
+# Rails pack rules — paste the ones you want into .highball/checks.yml.
+#
+# Adopt deliberately, not wholesale. Every rule below encodes an opinion, and
+# a rule your codebase doesn't already believe will fail on day one and teach
+# everyone to ignore the guardrail. Start with the tier-1 rules; add the rest
+# as the codebase earns them.
+#
+# Containerized repo? These run wherever your `exec.via` sends them. They are
+# pure analyzers: they read files from the repo root and need no database, no
+# network, and (since 0.1.0) no git — the runner hands them the changed-file
+# list via HIGHBALL_CHANGED_FILES.
+
+checks:
+  # --- Tier 1: true of essentially every Rails codebase -------------------
+
+  # Focused specs shrink the suite to one example while everything else
+  # "passes" by not running. Full scan on purpose: a focus anywhere poisons
+  # every run, so there is no --changed-only mode.
+  - id: spec-hygiene
+    name: No focused specs
+    run: .highball/packs/rails/checks/check-spec-hygiene
+    fast: true
+
+  # Changed models/controllers/jobs/etc. must have a paired spec file. A
+  # ratchet by nature — untouched code is never blamed.
+  - id: spec-pairing
+    name: Changed code has paired specs
+    run: .highball/packs/rails/checks/check-spec-pairing --changed-only
+    fast: true
+
+  # --- Tier 2: house conventions, adopt if you share them ------------------
+
+  # Comments must earn their place: why, not what. Prism-based, so it reads
+  # real method spans rather than guessing with regex.
+  - id: comment-standards
+    name: Comment standards
+    run: .highball/packs/rails/checks/check-comments --changed-only
+    fast: true
+
+  # New migrations use UUID primary keys.
+  # - id: migrations
+  #   name: Migrations use UUID keys
+  #   run: .highball/packs/rails/checks/check-migrations --changed-only
+  #   fast: true
+
+  # Every gem in the Gemfile carries a why-comment. Cheap, and it kills the
+  # "what is this even for" archaeology later.
+  # - id: gem-comments
+  #   name: Gems carry why-comments
+  #   run: .highball/packs/rails/checks/check-gem-comments
+  #   fast: true
+
+  # --- Tier 3: strong architectural opinions -------------------------------
+  # These assume specific patterns. Read the script before enabling; if your
+  # app doesn't use the pattern, the rule is noise, not signal.
+
+  # Assumes app/interactions (ActiveInteraction). Flags fat controllers and
+  # models: transactions, multi-write orchestration, over-long methods.
+  # - id: logic-placement
+  #   name: Logic lives in interactions
+  #   run: .highball/packs/rails/checks/check-logic-placement
+  #   fast: true
+
+  # Assumes multi-tenancy scoped through a current_organization-style helper.
+  # - id: tenancy
+  #   name: Controllers scope through the tenant
+  #   run: .highball/packs/rails/checks/check-tenancy
+  #   fast: true
+
+  # --- Tier 4: LocoMotion component library --------------------------------
+  # Only meaningful if you build views with LocoMotion. Both support
+  # --changed-only, which is the rollout ratchet for a legacy backlog.
+
+  # - id: component-usage
+  #   name: Views use LocoMotion components
+  #   run: .highball/packs/rails/checks/check-component-usage --changed-only
+  #   fast: true
+
+  # - id: ui-standards
+  #   name: UI follows LocoMotion standards
+  #   run: .highball/packs/rails/checks/check-ui-standards --changed-only
+  #   fast: true
+
+  # --- AI-judged rules -----------------------------------------------------
+  # bin/ai-check hands changed files plus a rubric to headless Claude. Never
+  # `fast` — LLM latency (and cost) belongs at turn end, not on every edit.
+  # Requires the `claude` CLI on the machine, so mark these `exec: host` in a
+  # containerized repo.
+
+  # - id: comment-quality
+  #   name: Comment quality (AI)
+  #   run: .highball/packs/rails/checks/ai-check .highball/packs/rails/rubrics/comment-quality.md
+
+  # - id: architecture-quality
+  #   name: Architecture & naming (AI)
+  #   run: .highball/packs/rails/checks/ai-check .highball/packs/rails/rubrics/architecture.md

@@ -1,0 +1,134 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/check-component-usage — enforces "Components Over Copy-Paste" where
+# AI agents most often break it: hand-rolling DaisyUI markup in a view
+# (`.badge.badge-success` / class="badge badge-success") instead of
+# calling the LocoMotion helper (`daisy_badge(css: "badge-success")`).
+# Deterministic on purpose — class tokens either appear or they don't.
+#
+# The scope line matters: only VIEW templates are scanned (app/views and
+# engine views), HAML and ERB both — sibling apps like trc use ERB.
+# Component classes and their sidecar templates are exempt because raw
+# DaisyUI classes are exactly where they belong — inside the component
+# that owns them. Views compose components; components own markup. Note
+# that `css:` params on helper calls are the sanctioned customization
+# channel and are never flagged; only `class:`/`class=` attributes and
+# HAML dot-shorthand are.
+#
+# --changed-only limits the scan to files this branch touches — the
+# rollout ratchet for repos with a legacy backlog: new and edited views
+# must comply, old ones get cleaned as they're touched, and nobody's
+# turn is blocked by markup they never went near.
+#
+# Escape hatch: put `loco-allow` in a comment on the offending line or the
+# line above it, for the rare view that legitimately hand-rolls markup.
+
+# Every entry pairs a DaisyUI component class with the LocoMotion call
+# that should replace it. Tailwind utilities (flex, p-4, hover:*) are
+# never in this list — utilities are fine in views; component classes
+# are not.
+BANNED = {
+  "alert" => "daisy_alert",
+  "avatar" => "daisy_avatar",
+  "badge" => "daisy_badge",
+  "btn" => "daisy_button",
+  "card" => "daisy_card",
+  "card-actions" => "daisy_card (actions slot)",
+  "card-body" => "daisy_card (body part)",
+  "card-title" => "daisy_card (title slot)",
+  "checkbox" => "f.daisy_checkbox",
+  "collapse" => "daisy_accordion or a component",
+  "countdown" => "daisy_countdown",
+  "dropdown" => "daisy_dropdown",
+  "input" => "daisy_text_input / f.daisy_text_input",
+  "loading" => "daisy_loading",
+  "menu" => "daisy_menu",
+  "modal" => "daisy_modal",
+  "navbar" => "daisy_navbar",
+  "progress" => "daisy_progress",
+  "radio" => "f.daisy_radio",
+  "range" => "f.daisy_range",
+  "select" => "daisy_select",
+  "stat" => "daisy_stat",
+  "stats" => "daisy_stat",
+  "steps" => "daisy_steps",
+  "swap" => "daisy_swap",
+  "tab" => "daisy_tabs",
+  "tabs" => "daisy_tabs",
+  "textarea" => "f.daisy_text_area",
+  "toggle" => "f.daisy_toggle",
+  "tooltip" => "daisy_tooltip (or tip: option)"
+}.freeze
+
+def ref_exists?(ref)
+  system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
+end
+
+# Same "what does this branch touch" definition as bin/check-comments:
+# branch commits + staged + unstaged + untracked, degrading gracefully
+# when there's no main or no commits at all.
+def changed_files
+  # The runner computes this once on the host and hands it down, so a rule
+  # running inside a container needs neither git nor repo history. Empty or
+  # absent means "unknown" -- fall back to asking git ourselves.
+  provided = ENV["HIGHBALL_CHANGED_FILES"].to_s
+  unless provided.strip.empty?
+    return provided.lines.map(&:strip).reject(&:empty?).uniq
+  end
+
+  parts = [ `git diff --name-only`, `git ls-files --others --exclude-standard` ]
+  if ref_exists?("HEAD")
+    parts << `git diff --name-only --cached`
+    base = %w[origin/main main origin/master master].find { |ref| ref_exists?(ref) }
+    parts << `git diff --name-only #{`git merge-base #{base} HEAD`.strip} HEAD` if base
+  end
+  parts.flat_map(&:lines).map(&:strip).uniq
+end
+
+files = Dir.glob("app/views/**/*.{haml,erb}") +
+        Dir.glob("engines/*/app/views/**/*.{haml,erb}")
+files &= changed_files if ARGV.include?("--changed-only")
+
+offenses = []
+
+files.sort.each do |path|
+  next unless File.exist?(path)
+
+  lines = File.read(path, encoding: "UTF-8").lines
+
+  lines.each_with_index do |line, index|
+    next if line.include?("loco-allow")
+    next if index.positive? && lines[index - 1].include?("loco-allow")
+
+    tokens = []
+
+    # HAML dot-shorthand: only lines that START an element (., %, #) carry
+    # classes this way — a leading `=` or `-` means Ruby code, where dots
+    # are method calls, not classes. Not applicable to ERB.
+    if path.end_with?(".haml")
+      stripped = line.lstrip
+      if stripped.start_with?(".", "%", "#")
+        tokens += stripped[/\A[^\s({=]+/].to_s.scan(/\.([a-z][\w-]*)/).flatten
+      end
+    end
+
+    # class: "..." in Ruby helper calls and class="..." in HTML/ERB tags.
+    # ERB interpolation fragments inside the attribute (<%= ... %>) split
+    # into tokens that simply never match the banned list.
+    line.scan(/class(?::\s*|\s*=\s*)["']([^"']+)["']/) do |(classes)|
+      tokens += classes.split
+    end
+
+    tokens.uniq.each do |token|
+      next unless BANNED.key?(token)
+
+      offenses << [ path, index + 1,
+                    ".#{token} — use #{BANNED[token]} instead" ]
+    end
+  end
+end
+
+offenses.each { |file, line, message| puts "#{file}:#{line}: #{message}" }
+puts "#{offenses.size} offense(s) across #{files.size} view file(s)"
+exit(offenses.empty? ? 0 : 1)

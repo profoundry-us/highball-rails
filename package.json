@@ -1,0 +1,42 @@
+{
+  "name": "@profoundry-us/highball-rails",
+  "version": "0.1.0",
+  "description": "Rails check pack for Highball — Prism-based analyzers and AI rubrics for Rails codebases, vendored into your repo and run by the Highball runner.",
+  "keywords": [
+    "highball",
+    "rails",
+    "ruby",
+    "checks",
+    "code-quality",
+    "claude-code"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/profoundry-us/highball-rails.git"
+  },
+  "homepage": "https://github.com/profoundry-us/highball-rails#readme",
+  "bugs": {
+    "url": "https://github.com/profoundry-us/highball-rails/issues"
+  },
+  "type": "module",
+  "bin": {
+    "highball-rails": "bin/highball-rails.js"
+  },
+  "files": [
+    "bin",
+    "checks",
+    "rubrics",
+    "template",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "peerDependencies": {
+    "@profoundry-us/highball": ">=0.3.0"
+  },
+  "license": "MIT"
+}

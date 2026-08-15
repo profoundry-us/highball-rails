@@ -1,0 +1,103 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/check-ui-standards — the LocoMotion visual-philosophy rules that go
+# beyond "use a component" (bin/check-component-usage's job):
+#
+#   1. Semantic tokens only: no Tailwind palette colors (text-red-500,
+#      bg-white) in views or component templates — DaisyUI tokens
+#      (primary, base-content, …) keep every theme working.
+#   2. No inline style attributes — styling flows through classes.
+#   3. No raw inline SVG in views — that's what loco_icon is for.
+#   4. Padding, never margin, on a component's root: components style
+#      their inside; placement belongs to the caller.
+#   5. No visual-variant params (size:/color:/variant:) on component
+#      initializers — LocoMotion's foundational ADR; customization is
+#      css:/html:, always.
+#
+# Escape hatch: `hb:allow` in a comment on the line or the line above.
+# --changed-only limits to files this branch touches (rollout ratchet).
+
+def ref_exists?(ref)
+  system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
+end
+
+# Intentionally duplicated across the bin/check-* scripts (not extracted
+# to a lib): each script must stay a self-contained single file so
+# sibling repos can take verbatim copies.
+def changed_files
+  # The runner computes this once on the host and hands it down, so a rule
+  # running inside a container needs neither git nor repo history. Empty or
+  # absent means "unknown" -- fall back to asking git ourselves.
+  provided = ENV["HIGHBALL_CHANGED_FILES"].to_s
+  unless provided.strip.empty?
+    return provided.lines.map(&:strip).reject(&:empty?).uniq
+  end
+
+  parts = [ `git diff --name-only`, `git ls-files --others --exclude-standard` ]
+  if ref_exists?("HEAD")
+    parts << `git diff --name-only --cached`
+    base = %w[origin/main main origin/master master].find { |ref| ref_exists?(ref) }
+    parts << `git diff --name-only #{`git merge-base #{base} HEAD`.strip} HEAD` if base
+  end
+  parts.flat_map(&:lines).map(&:strip).uniq
+end
+
+PALETTE = %w[red orange amber yellow lime green emerald teal cyan sky blue
+             indigo violet purple fuchsia pink rose slate gray grey zinc
+             neutral stone].join("|")
+HARDCODED_COLOR = /\b(?:text|bg|border|fill|stroke|from|via|to)-(?:white|black|(?:#{PALETTE})-\d{2,3})\b/
+ARBITRARY_COLOR = /\[#[0-9a-fA-F]{3,8}\]/
+INLINE_STYLE = /\bstyle\s*[:=]\s*["']/
+RAW_SVG = /(?:<svg\b|%svg\b)/
+ROOT_MARGIN = /add_css\(\s*:component\s*,\s*["'][^"']*(?:\A|\s)-?m[trblxy]?-(?:\d|px|auto)/
+VARIANT_PARAM = /def initialize\([^)]*\b(?:size|color|variant):/
+
+views = Dir.glob("app/views/**/*.{haml,erb}") +
+        Dir.glob("engines/*/app/views/**/*.{haml,erb}")
+templates = Dir.glob("app/components/**/*.{haml,erb}") +
+            Dir.glob("engines/*/app/components/**/*.{haml,erb}")
+classes = Dir.glob("app/components/**/*.rb") +
+          Dir.glob("engines/*/app/components/**/*.rb")
+
+if ARGV.include?("--changed-only")
+  changed = changed_files
+  views &= changed
+  templates &= changed
+  classes &= changed
+end
+
+offenses = []
+
+scan = lambda do |paths, rules|
+  paths.sort.each do |path|
+    next unless File.exist?(path)
+
+    lines = File.read(path, encoding: "UTF-8").lines
+    lines.each_with_index do |line, index|
+      next if line.include?("hb:allow")
+      next if index.positive? && lines[index - 1].include?("hb:allow")
+
+      rules.each do |pattern, message|
+        offenses << [ path, index + 1, message ] if line.match?(pattern)
+      end
+    end
+  end
+end
+
+scan.call(views + templates, [
+  [ HARDCODED_COLOR, "hardcoded palette color — use semantic tokens (primary, base-content, …)" ],
+  [ ARBITRARY_COLOR, "arbitrary hex color — use semantic tokens" ],
+  [ INLINE_STYLE, "inline style — use classes (or a component part)" ]
+])
+scan.call(views, [
+  [ RAW_SVG, "raw inline SVG — use loco_icon" ]
+])
+scan.call(classes, [
+  [ ROOT_MARGIN, "margin on component root — components style their inside; placement belongs to the caller" ],
+  [ VARIANT_PARAM, "visual-variant param — customization is css:/html:, never size:/color:/variant:" ]
+])
+
+offenses.each { |file, line, message| puts "#{file}:#{line}: #{message}" }
+puts "#{offenses.size} offense(s)"
+exit(offenses.empty? ? 0 : 1)

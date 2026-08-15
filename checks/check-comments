@@ -1,0 +1,157 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/check-comments — the comment-standards check behind the
+# "comment-standards" rule in .highball/checks.yml. It checks what a
+# machine CAN check: presence and shape. Whether a comment explains *why*
+# rather than *what* is a judgment call — that belongs to review or a
+# future LLM-backed check, not a regex. Keeping this deterministic means
+# it's fast enough to run on every agent edit and it never flakes.
+#
+#   bin/check-comments                  # everything (tracked + untracked)
+#   bin/check-comments --changed-only   # only what this branch touches
+#   bin/check-comments --format json    # machine-readable, for the runner
+
+require "prism"
+require "json"
+require "optparse"
+
+options = { changed_only: false, format: "text" }
+OptionParser.new do |opts|
+  opts.on("--changed-only") { options[:changed_only] = true }
+  opts.on("--format FMT")   { |fmt| options[:format] = fmt }
+end.parse!
+
+def ref_exists?(ref)
+  system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
+end
+
+# "Changed" means everything the branch touches that main doesn't have:
+# committed branch work, staged and unstaged edits, and brand-new untracked
+# files. Agents run against dirty trees, so the dirty state is the point.
+# Every git call degrades gracefully — a fresh repo with no commits (or no
+# main yet) simply widens toward "everything".
+# The runner computes the changed list once on the host and hands it down
+# via HIGHBALL_CHANGED_FILES, so this rule needs neither git nor history in
+# its own execution context (which may be a container). Empty or absent
+# means "unknown" -- fall back to asking git ourselves.
+provided = ENV["HIGHBALL_CHANGED_FILES"].to_s
+lists =
+  if options[:changed_only] && !provided.strip.empty?
+    [ provided ]
+  elsif options[:changed_only]
+    parts = [ `git diff --name-only`, `git ls-files --others --exclude-standard` ]
+    if ref_exists?("HEAD")
+      parts << `git diff --name-only --cached`
+      base = %w[origin/main main].find { |ref| ref_exists?(ref) }
+      parts << `git diff --name-only #{`git merge-base #{base} HEAD`.strip} HEAD` if base
+    end
+    parts
+  else
+    [ `git ls-files --cached --others --exclude-standard` ]
+  end
+
+# db/ is generated schema + migrations (migration classes are named after
+# what they do); bin/ and config/ are framework boilerplate. Comment
+# standards apply to the code we actually author.
+EXCLUDED_PREFIXES = %w[db/ bin/ config/ node_modules/ vendor/].freeze
+
+files = lists.flat_map(&:lines).map(&:strip).uniq
+             .select { |path| path.end_with?(".rb") && File.exist?(path) }
+             .reject { |path| EXCLUDED_PREFIXES.any? { |prefix| path.start_with?(prefix) } }
+
+offenses = []
+
+# Collects class/module definitions so we can demand a comment block above
+# each one. Methods are deliberately NOT required to have comments — the
+# house style is "why" prose where it earns its place, not doc headers on
+# every def.
+class DefinitionCollector < Prism::Visitor
+  attr_reader :nodes
+
+  def initialize
+    @nodes = []
+  end
+
+  def visit_class_node(node)
+    @nodes << node
+    super
+  end
+
+  def visit_module_node(node)
+    @nodes << node
+    super
+  end
+end
+
+# A module whose entire body is one class/module is just namespacing
+# (module Checks wrapping a class) — the comment belongs on the thing
+# inside, not the wrapper.
+def namespace_only?(node)
+  return false unless node.is_a?(Prism::ModuleNode)
+
+  body = node.body
+  body.is_a?(Prism::StatementsNode) && body.body.size == 1 &&
+    (body.body.first.is_a?(Prism::ClassNode) || body.body.first.is_a?(Prism::ModuleNode))
+end
+
+files.each do |path|
+  parsed = Prism.parse(File.read(path))
+  comment_lines = parsed.comments.to_h { |c| [ c.location.start_line, c.slice ] }
+
+  collector = DefinitionCollector.new
+  parsed.value.accept(collector)
+
+  collector.nodes.each do |node|
+    next if namespace_only?(node)
+
+    # Walk upward from the definition, gathering the contiguous comment
+    # block. Shebangs and magic comments don't count as documentation.
+    block = []
+    line = node.location.start_line - 1
+    while (text = comment_lines[line]) &&
+          !text.start_with?("#!") && !text.include?("frozen_string_literal")
+      block.unshift(text.sub(/\A#\s?/, ""))
+      line -= 1
+    end
+
+    words = block.join(" ").split.size
+    name = node.constant_path.slice
+
+    if block.empty?
+      offenses << [ path, node.location.start_line,
+                    "#{name} has no comment — say why it exists" ]
+    elsif words < 8
+      offenses << [ path, node.location.start_line,
+                    "#{name}'s comment is #{words} words — that's a label, not an explanation" ]
+    end
+  end
+
+  parsed.comments.each do |comment|
+    line = comment.location.start_line
+    text = comment.slice
+
+    offenses << [ path, line, "comment exceeds 80 characters" ] if text.length > 80
+
+    if text =~ /#\s*(TODO|FIXME)/ && text !~ /(#\d+|http)/
+      offenses << [ path, line, "TODO/FIXME without an issue or link" ]
+    end
+
+    # Commented-out code, the narrow-and-sure version: only patterns that
+    # are unambiguously code, so prose never false-positives.
+    if text =~ /\A#\s*(def |end\z|elsif |\w+\.\w+\(.*\)\z)/
+      offenses << [ path, line, "commented-out code — delete it, git remembers" ]
+    end
+  end
+end
+
+if options[:format] == "json"
+  puts({ status: offenses.empty? ? "passed" : "failed",
+         stats: { files: files.size, offenses: offenses.size },
+         offenses: offenses.map { |f, l, m| { file: f, line: l, message: m } } }.to_json)
+else
+  offenses.each { |f, l, m| puts "#{f}:#{l}: #{m}" }
+  puts "#{offenses.size} offense(s) across #{files.size} file(s)"
+end
+
+exit(offenses.empty? ? 0 : 1)

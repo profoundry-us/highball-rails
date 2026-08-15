@@ -1,0 +1,66 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/check-migrations — UUID primary keys everywhere, enforced at the
+# migration level: one forgotten `id: :uuid` (or an untyped reference to
+# a uuid table) is a painless one-line fix today and a data-migration
+# project after real rows exist. Changed-only by default in checks.yml —
+# historical migrations are history; only new ones are checkable intent.
+#
+# Escape hatch: `hb:allow` on the line or the line above (e.g. a join
+# table to an external integer-keyed system).
+
+def ref_exists?(ref)
+  system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
+end
+
+# Intentionally duplicated across the bin/check-* scripts (not extracted
+# to a lib): each script must stay a self-contained single file so
+# sibling repos can take verbatim copies.
+def changed_files
+  # The runner computes this once on the host and hands it down, so a rule
+  # running inside a container needs neither git nor repo history. Empty or
+  # absent means "unknown" -- fall back to asking git ourselves.
+  provided = ENV["HIGHBALL_CHANGED_FILES"].to_s
+  unless provided.strip.empty?
+    return provided.lines.map(&:strip).reject(&:empty?).uniq
+  end
+
+  parts = [ `git diff --name-only`, `git ls-files --others --exclude-standard` ]
+  if ref_exists?("HEAD")
+    parts << `git diff --name-only --cached`
+    base = %w[origin/main main origin/master master].find { |ref| ref_exists?(ref) }
+    parts << `git diff --name-only #{`git merge-base #{base} HEAD`.strip} HEAD` if base
+  end
+  parts.flat_map(&:lines).map(&:strip).uniq
+end
+
+files = Dir.glob("db/migrate/*.rb")
+files &= changed_files if ARGV.include?("--changed-only")
+
+offenses = []
+
+files.sort.each do |path|
+  next unless File.exist?(path)
+
+  lines = File.read(path, encoding: "UTF-8").lines
+  lines.each_with_index do |line, index|
+    next if line.include?("hb:allow")
+    next if index.positive? && lines[index - 1].include?("hb:allow")
+
+    if line.match?(/\bcreate_table\b/) && !line.include?("id: :uuid")
+      offenses << [ path, index + 1, "create_table without id: :uuid" ]
+    end
+    if line.match?(/\bt\.references\b|\badd_reference\b/) && !line.include?("type: :uuid")
+      # References often wrap onto the next line; only flag when the type
+      # isn't there either.
+      next if lines[index + 1]&.include?("type: :uuid")
+
+      offenses << [ path, index + 1, "reference without type: :uuid" ]
+    end
+  end
+end
+
+offenses.each { |file, line, message| puts "#{file}:#{line}: #{message}" }
+puts "#{offenses.size} offense(s)"
+exit(offenses.empty? ? 0 : 1)

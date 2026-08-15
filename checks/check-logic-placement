@@ -1,0 +1,159 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/check-logic-placement — the deterministic half of "use interactions,
+# not fat controllers or models". It can't judge intent (the AI
+# architecture rubric does that); it flags the structural signals that
+# almost always mean an interaction is being written in the wrong place:
+#
+#   Controllers — thin dispatchers: auth, one interaction call, render.
+#     * a transaction block (multi-step by definition)
+#     * two or more persistence calls in one method
+#     * a persistence call plus a mailer/job enqueue (orchestration)
+#     * a method body over 15 lines
+#   Models — data, associations, small semantics:
+#     * a method body over 15 lines
+#     * mailer/job enqueues (callback orchestration in disguise)
+#     * transaction blocks (multi-record writes belong in interactions)
+#
+# Interactions themselves are exempt — they're where this code belongs.
+# Known blind spot: bare `create!` without a receiver only appears inside
+# model factory methods, so persistence counting matches receiver calls
+# (`.save`, `assoc.create!`) — which is how controllers actually write.
+#
+# Escape hatch: `hb:allow` on the def line or anywhere in the contiguous
+# comment block above it. --changed-only for the rollout ratchet.
+
+require "prism"
+
+WRITE_CALL = /\.(?:save!?|update!?|create!?|destroy!?|upsert|insert_all!?|update_all|destroy_all|delete_all)\b/
+ENQUEUE_CALL = /\b(?:deliver_now|deliver_later|perform_now|perform_later|perform_async)\b/
+TRANSACTION = /\btransaction\b/
+MAX_METHOD_LINES = 15
+
+def ref_exists?(ref)
+  system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
+end
+
+# Intentionally duplicated across the bin/check-* scripts (not extracted
+# to a lib): each script must stay a self-contained single file so
+# sibling repos can take verbatim copies.
+def changed_files
+  # The runner computes this once on the host and hands it down, so a rule
+  # running inside a container needs neither git nor repo history. Empty or
+  # absent means "unknown" -- fall back to asking git ourselves.
+  provided = ENV["HIGHBALL_CHANGED_FILES"].to_s
+  unless provided.strip.empty?
+    return provided.lines.map(&:strip).reject(&:empty?).uniq
+  end
+
+  parts = [ `git diff --name-only`, `git ls-files --others --exclude-standard` ]
+  if ref_exists?("HEAD")
+    parts << `git diff --name-only --cached`
+    base = %w[origin/main main origin/master master].find { |ref| ref_exists?(ref) }
+    parts << `git diff --name-only #{`git merge-base #{base} HEAD`.strip} HEAD` if base
+  end
+  parts.flat_map(&:lines).map(&:strip).uniq
+end
+
+# The pragma counts anywhere in the contiguous comment block above the
+# def — placement exceptions deserve real justifications.
+def allowed?(lines, def_index)
+  return true if lines[def_index].include?("hb:allow")
+
+  cursor = def_index - 1
+  while cursor >= 0 && lines[cursor].lstrip.start_with?("#")
+    return true if lines[cursor].include?("hb:allow")
+
+    cursor -= 1
+  end
+  false
+end
+
+# Collects every method definition; Prism gives exact line spans, so
+# method length and per-method body scans are precise rather than
+# indentation guesses.
+class MethodCollector < Prism::Visitor
+  attr_reader :methods
+
+  def initialize
+    @methods = []
+  end
+
+  def visit_def_node(node)
+    @methods << node
+    super
+  end
+end
+
+controllers = Dir.glob("app/controllers/**/*.rb") +
+              Dir.glob("engines/*/app/controllers/**/*.rb")
+models = Dir.glob("app/models/**/*.rb") +
+         Dir.glob("engines/*/app/models/**/*.rb")
+
+if ARGV.include?("--changed-only")
+  changed = changed_files
+  controllers &= changed
+  models &= changed
+end
+
+offenses = []
+
+scan = lambda do |paths, kind|
+  paths.sort.each do |path|
+    next unless File.exist?(path)
+
+    lines = File.read(path, encoding: "UTF-8").lines
+    collector = MethodCollector.new
+    Prism.parse(lines.join).value.accept(collector)
+
+    collector.methods.each do |node|
+      start_line = node.location.start_line
+      end_line = node.location.end_line
+      next if allowed?(lines, start_line - 1)
+
+      body = if end_line == start_line
+        lines[start_line - 1].to_s # endless def — scan the line itself
+      else
+        lines[start_line..(end_line - 2)]&.join.to_s
+      end
+      span = [ end_line - start_line - 1, 1 ].max
+      where = "#{path}:#{start_line}"
+      name = "##{node.name}"
+
+      writes = body.scan(WRITE_CALL).size
+      enqueues = body.match?(ENQUEUE_CALL)
+      transaction = body.match?(TRANSACTION)
+
+      if transaction
+        offenses << [ where, "#{name} wraps a transaction — multi-step by definition; move it to an interaction" ]
+      end
+
+      if kind == :controller
+        if writes >= 2
+          offenses << [ where, "#{name} makes #{writes} write calls — orchestration belongs in an interaction" ]
+        end
+        if writes >= 1 && enqueues
+          offenses << [ where, "#{name} writes AND enqueues — side-effect orchestration belongs in an interaction" ]
+        end
+        if span > MAX_METHOD_LINES
+          offenses << [ where, "#{name} is #{span} lines — controllers are thin dispatchers; extract an interaction" ]
+        end
+      else
+        if span > MAX_METHOD_LINES
+          offenses << [ where, "#{name} is #{span} lines — long model methods usually hide an interaction or component" ]
+        end
+        if enqueues
+          offenses << [ where, "#{name} enqueues mail/jobs from a model — orchestration belongs in an interaction" ]
+        end
+      end
+    end
+  end
+end
+
+scan.call(controllers, :controller)
+scan.call(models, :model)
+
+offenses.each { |where, message| puts "#{where}: #{message}" }
+puts "#{offenses.size} offense(s)"
+exit(offenses.empty? ? 0 : 1)
