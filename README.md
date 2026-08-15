@@ -1,8 +1,8 @@
 # @profoundry-us/highball-rails
 
 The Rails check pack for [Highball](https://github.com/profoundry-us/highball-runner):
-Prism-based analyzers and AI rubrics for Rails codebases, vendored into your
-repo and executed by the Highball runner.
+Ruby analyzers and AI rubrics for Rails codebases, vendored into your repo and
+executed by the Highball runner.
 
 The runner is a generic orchestrator — it runs whatever `.highball/checks.yml`
 names, in whatever language. This pack is the Rails *content*: the rules that
@@ -69,8 +69,20 @@ runner via `HIGHBALL_CHANGED_FILES`, so `--changed-only` rules work inside a
 container with no repo history. They fall back to asking git directly when
 that variable is absent, so they still work when run by hand.
 
-They need **Ruby** (they use Prism, which ships with Ruby 3.3+). In a
-containerized repo, that means they run wherever your `exec.via` sends them.
+They need **Ruby**, and most of them need nothing else — they are text and
+regex scans over the files the runner names. Two are parser-based and need
+**Ruby 3.3+**, where Prism ships in the standard library:
+
+- `check-comments` walks the syntax tree to pair each class and module with
+  the comments directly above it, which is how it can tell that a module whose
+  whole body is one class is just namespacing and shouldn't be commented.
+- `check-logic-placement` uses real method line spans, so "too long" and
+  "opens a transaction in a controller" are measured, not guessed from
+  indentation.
+
+On older Ruby those two abort with an explanation naming the rule to remove;
+the other seven are unaffected. In a containerized repo, all of them run
+wherever your `exec.via` sends them.
 
 The AI rubrics are not scripts at all. Since runner 0.4.0 they are declared
 with `rubric:` instead of `run:`, and the runner judges them itself — always

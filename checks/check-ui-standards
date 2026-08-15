@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-ui-standards — the LocoMotion visual-philosophy rules that go
-# beyond "use a component" (bin/check-component-usage's job):
+# check-ui-standards — the LocoMotion visual-philosophy rules that go
+# beyond "use a component" (check-component-usage's job):
 #
 #   1. Semantic tokens only: no Tailwind palette colors (text-red-500,
 #      bg-white) in views or component templates — DaisyUI tokens
@@ -22,7 +22,7 @@ def ref_exists?(ref)
   system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
 end
 
-# Intentionally duplicated across the bin/check-* scripts (not extracted
+# Intentionally duplicated across the check-* scripts (not extracted
 # to a lib): each script must stay a self-contained single file so
 # sibling repos can take verbatim copies.
 def changed_files

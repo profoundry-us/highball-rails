@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-component-usage — enforces "Components Over Copy-Paste" where
+# check-component-usage — enforces "Components Over Copy-Paste" where
 # AI agents most often break it: hand-rolling DaisyUI markup in a view
 # (`.badge.badge-success` / class="badge badge-success") instead of
 # calling the LocoMotion helper (`daisy_badge(css: "badge-success")`).
@@ -65,7 +65,7 @@ def ref_exists?(ref)
   system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
 end
 
-# Same "what does this branch touch" definition as bin/check-comments:
+# Same "what does this branch touch" definition as check-comments:
 # branch commits + staged + unstaged + untracked, degrading gracefully
 # when there's no main or no commits at all.
 def changed_files

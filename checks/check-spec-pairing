@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-spec-pairing — the "required test types present" rule, real at
+# check-spec-pairing — the "required test types present" rule, real at
 # last: every changed model, interaction, component, and controller must
 # have its paired spec file. The spec only has to EXIST — content quality
 # is the suite's job — because the failure mode this catches is the agent
@@ -19,7 +19,7 @@ def ref_exists?(ref)
   system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
 end
 
-# Intentionally duplicated across the bin/check-* scripts (not extracted
+# Intentionally duplicated across the check-* scripts (not extracted
 # to a lib): each script must stay a self-contained single file so
 # sibling repos can take verbatim copies.
 def changed_files

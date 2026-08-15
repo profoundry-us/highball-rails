@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-tenancy — the security-grade one. Tenancy scoping IS the
+# check-tenancy — the security-grade one. Tenancy scoping IS the
 # authorization mechanism in this codebase: controllers reach data via
 # current_organization.… / current_project.…, so an unscoped
 # `Checks::Run.find(params[:id])` isn't a style problem, it's a

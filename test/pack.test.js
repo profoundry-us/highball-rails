@@ -83,6 +83,18 @@ test("every rubric declares the language policy the runner judges by", () => {
   }
 });
 
+test("checks that need Prism say so instead of dying on a LoadError", () => {
+  for (const file of readdirSync(join(ROOT, "checks"))) {
+    const source = readFileSync(join(ROOT, "checks", file), "utf8");
+    if (!source.includes('require "prism"')) continue;
+
+    // Prism is the pack's only dependency beyond plain Ruby (3.3+). A repo on
+    // an older Ruby should be told which rule to drop, not handed a backtrace.
+    assert.match(source, /rescue LoadError/, `${file} requires Prism unguarded`);
+    assert.match(source, /Ruby 3\.3\+/, `${file} does not name the version floor`);
+  }
+});
+
 test("every shipped check is syntactically valid Ruby", () => {
   for (const file of readdirSync(join(ROOT, "checks"))) {
     execFileSync("ruby", [ "-c", join(ROOT, "checks", file) ], { stdio: "pipe" });

@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-logic-placement — the deterministic half of "use interactions,
+# check-logic-placement — the deterministic half of "use interactions,
 # not fat controllers or models". It can't judge intent (the AI
 # architecture rubric does that); it flags the structural signals that
 # almost always mean an interaction is being written in the wrong place:
@@ -24,7 +24,17 @@
 # Escape hatch: `hb:allow` on the def line or anywhere in the contiguous
 # comment block above it. --changed-only for the rollout ratchet.
 
-require "prism"
+# Prism ships with Ruby 3.3+ and is the only dependency in this pack beyond
+# plain Ruby. Say so, rather than dying on a bare LoadError: the reader's
+# actual decision is "upgrade Ruby, or drop this rule from checks.yml", and a
+# stack trace doesn't offer it.
+begin
+  require "prism"
+rescue LoadError
+  abort "check-logic-placement needs Prism, which ships with Ruby 3.3+ " \
+        "(this is Ruby #{RUBY_VERSION}). Upgrade Ruby, or remove the " \
+        "logic-placement rule from .highball/checks.yml."
+end
 
 WRITE_CALL = /\.(?:save!?|update!?|create!?|destroy!?|upsert|insert_all!?|update_all|destroy_all|delete_all)\b/
 ENQUEUE_CALL = /\b(?:deliver_now|deliver_later|perform_now|perform_later|perform_async)\b/
@@ -35,7 +45,7 @@ def ref_exists?(ref)
   system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
 end
 
-# Intentionally duplicated across the bin/check-* scripts (not extracted
+# Intentionally duplicated across the check-* scripts (not extracted
 # to a lib): each script must stay a self-contained single file so
 # sibling repos can take verbatim copies.
 def changed_files

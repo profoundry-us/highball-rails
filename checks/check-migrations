@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-migrations — UUID primary keys everywhere, enforced at the
+# check-migrations — UUID primary keys everywhere, enforced at the
 # migration level: one forgotten `id: :uuid` (or an untyped reference to
 # a uuid table) is a painless one-line fix today and a data-migration
 # project after real rows exist. Changed-only by default in checks.yml —
@@ -14,7 +14,7 @@ def ref_exists?(ref)
   system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
 end
 
-# Intentionally duplicated across the bin/check-* scripts (not extracted
+# Intentionally duplicated across the check-* scripts (not extracted
 # to a lib): each script must stay a self-contained single file so
 # sibling repos can take verbatim copies.
 def changed_files

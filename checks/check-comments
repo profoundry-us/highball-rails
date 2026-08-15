@@ -1,18 +1,29 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-comments — the comment-standards check behind the
+# check-comments — the comment-standards check behind the
 # "comment-standards" rule in .highball/checks.yml. It checks what a
 # machine CAN check: presence and shape. Whether a comment explains *why*
 # rather than *what* is a judgment call — that belongs to review or a
 # future LLM-backed check, not a regex. Keeping this deterministic means
 # it's fast enough to run on every agent edit and it never flakes.
 #
-#   bin/check-comments                  # everything (tracked + untracked)
-#   bin/check-comments --changed-only   # only what this branch touches
-#   bin/check-comments --format json    # machine-readable, for the runner
+#   check-comments                  # everything (tracked + untracked)
+#   check-comments --changed-only   # only what this branch touches
+#   check-comments --format json    # machine-readable, for the runner
 
-require "prism"
+# Prism ships with Ruby 3.3+ and is the only dependency in this pack beyond
+# plain Ruby. Say so, rather than dying on a bare LoadError: the reader's
+# actual decision is "upgrade Ruby, or drop this rule from checks.yml", and a
+# stack trace doesn't offer it.
+begin
+  require "prism"
+rescue LoadError
+  abort "check-comments needs Prism, which ships with Ruby 3.3+ " \
+        "(this is Ruby #{RUBY_VERSION}). Upgrade Ruby, or remove the " \
+        "comment-standards rule from .highball/checks.yml."
+end
+
 require "json"
 require "optparse"
 
