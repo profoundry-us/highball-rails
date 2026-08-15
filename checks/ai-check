@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/ai-check — runs an AI-judged check: gathers the Ruby files this
+# ai-check — runs an AI-judged check: gathers the Ruby files this
 # branch touches, sends them to headless Claude Code (`claude -p`) with a
 # rubric, and turns the model's JSON verdict into the same exit-code
 # contract the deterministic checks use. The rubric lives in the repo and
@@ -14,12 +14,13 @@
 # sweet-talk its reviewer), and they run at turn end only — never on the
 # per-edit fast path, where latency would be felt on every keystroke.
 #
-#   bin/ai-check .highball/rubrics/comment-quality.md
+#   .highball/packs/rails/checks/ai-check \
+#     .highball/packs/rails/rubrics/comment-quality.md
 
 require "json"
 require "open3"
 
-rubric_path = ARGV.fetch(0) { abort "usage: bin/ai-check <rubric-file>" }
+rubric_path = ARGV.fetch(0) { abort "usage: ai-check <rubric-file>" }
 
 # encoding: explicit UTF-8 on every File.read in this script — hook and CI
 # shells often run without LANG set, which drops Ruby's default external

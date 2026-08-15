@@ -1,7 +1,6 @@
 # Comment quality — the judgment half of comment standards
 
-.highball/bin/check-comments enforces presence and shape deterministically;
-this
+The check-comments rule enforces presence and shape deterministically; this
 rubric judges what a regex can't: whether comments earn their place.
 
 A comment VIOLATES this rubric when it:

@@ -82,7 +82,7 @@ checks:
   #   fast: true
 
   # --- AI-judged rules -----------------------------------------------------
-  # bin/ai-check hands changed files plus a rubric to headless Claude. Never
+  # ai-check hands changed files plus a rubric to headless Claude. Never
   # `fast` — LLM latency (and cost) belongs at turn end, not on every edit.
   # Requires the `claude` CLI on the machine, so mark these `exec: host` in a
   # containerized repo.
