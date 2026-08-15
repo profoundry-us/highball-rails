@@ -68,7 +68,7 @@ jobs:
             let d='';process.stdin.on('data',c=>d+=c).on('end',()=>
               console.log(JSON.parse(d)[0].files.map(f=>f.path).join('\n')))")
           echo "$files"
-          for required in bin/highball-rails.js template/rules.yml checks/check-spec-hygiene rubrics/architecture.md rubrics/comment-quality.md; do
+          for required in bin/highball-rails.js template/rules.yml checks/check-spec-hygiene lib/changed_files.rb rubrics/architecture.md rubrics/comment-quality.md; do
             echo "$files" | grep -qx "$required" || {
               echo "::error::$required is missing from the package."
               exit 1

@@ -36,7 +36,9 @@ function install() {
     : null;
 
   mkdirSync(DEST, { recursive: true });
-  for (const dir of [ "checks", "rubrics" ]) {
+  // lib/ travels with the checks: they `require_relative "../lib/..."`, so a
+  // vendored checks/ without it is a directory of scripts that all die on load.
+  for (const dir of [ "checks", "lib", "rubrics" ]) {
     cpSync(join(PACK_ROOT, dir), join(DEST, dir), { recursive: true });
   }
   // Vendored scripts arrive executable so checks.yml can name them directly.

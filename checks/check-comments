@@ -27,49 +27,24 @@ end
 require "json"
 require "optparse"
 
+# Shared with every other check in this pack; see lib/changed_files.rb
+# for why this is no longer copied into each script.
+require_relative "../lib/changed_files"
+
 options = { changed_only: false, format: "text" }
 OptionParser.new do |opts|
   opts.on("--changed-only") { options[:changed_only] = true }
   opts.on("--format FMT")   { |fmt| options[:format] = fmt }
 end.parse!
 
-def ref_exists?(ref)
-  system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
-end
-
-# "Changed" means everything the branch touches that main doesn't have:
-# committed branch work, staged and unstaged edits, and brand-new untracked
-# files. Agents run against dirty trees, so the dirty state is the point.
-# Every git call degrades gracefully — a fresh repo with no commits (or no
-# main yet) simply widens toward "everything".
-# The runner computes the changed list once on the host and hands it down
-# via HIGHBALL_CHANGED_FILES, so this rule needs neither git nor history in
-# its own execution context (which may be a container). Empty or absent
-# means "unknown" -- fall back to asking git ourselves.
-provided = ENV["HIGHBALL_CHANGED_FILES"].to_s
-lists =
-  if options[:changed_only] && !provided.strip.empty?
-    [ provided ]
-  elsif options[:changed_only]
-    parts = [ `git diff --name-only`, `git ls-files --others --exclude-standard` ]
-    if ref_exists?("HEAD")
-      parts << `git diff --name-only --cached`
-      base = %w[origin/main main].find { |ref| ref_exists?(ref) }
-      parts << `git diff --name-only #{`git merge-base #{base} HEAD`.strip} HEAD` if base
-    end
-    parts
-  else
-    [ `git ls-files --cached --others --exclude-standard` ]
-  end
-
 # db/ is generated schema + migrations (migration classes are named after
 # what they do); bin/ and config/ are framework boilerplate. Comment
 # standards apply to the code we actually author.
 EXCLUDED_PREFIXES = %w[db/ bin/ config/ node_modules/ vendor/].freeze
 
-files = lists.flat_map(&:lines).map(&:strip).uniq
-             .select { |path| path.end_with?(".rb") && File.exist?(path) }
-             .reject { |path| EXCLUDED_PREFIXES.any? { |prefix| path.start_with?(prefix) } }
+files = (options[:changed_only] ? Highball.changed_files : Highball.all_files)
+        .select { |path| path.end_with?(".rb") && File.exist?(path) }
+        .reject { |path| EXCLUDED_PREFIXES.any? { |prefix| path.start_with?(prefix) } }
 
 offenses = []
 

@@ -28,6 +28,10 @@
 # that should replace it. Tailwind utilities (flex, p-4, hover:*) are
 # never in this list — utilities are fine in views; component classes
 # are not.
+# Shared with every other check in this pack; see lib/changed_files.rb
+# for why this is no longer copied into each script.
+require_relative "../lib/changed_files"
+
 BANNED = {
   "alert" => "daisy_alert",
   "avatar" => "daisy_avatar",
@@ -61,34 +65,9 @@ BANNED = {
   "tooltip" => "daisy_tooltip (or tip: option)"
 }.freeze
 
-def ref_exists?(ref)
-  system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
-end
-
-# Same "what does this branch touch" definition as check-comments:
-# branch commits + staged + unstaged + untracked, degrading gracefully
-# when there's no main or no commits at all.
-def changed_files
-  # The runner computes this once on the host and hands it down, so a rule
-  # running inside a container needs neither git nor repo history. Empty or
-  # absent means "unknown" -- fall back to asking git ourselves.
-  provided = ENV["HIGHBALL_CHANGED_FILES"].to_s
-  unless provided.strip.empty?
-    return provided.lines.map(&:strip).reject(&:empty?).uniq
-  end
-
-  parts = [ `git diff --name-only`, `git ls-files --others --exclude-standard` ]
-  if ref_exists?("HEAD")
-    parts << `git diff --name-only --cached`
-    base = %w[origin/main main origin/master master].find { |ref| ref_exists?(ref) }
-    parts << `git diff --name-only #{`git merge-base #{base} HEAD`.strip} HEAD` if base
-  end
-  parts.flat_map(&:lines).map(&:strip).uniq
-end
-
 files = Dir.glob("app/views/**/*.{haml,erb}") +
         Dir.glob("engines/*/app/views/**/*.{haml,erb}")
-files &= changed_files if ARGV.include?("--changed-only")
+files &= Highball.changed_files if ARGV.include?("--changed-only")
 
 offenses = []
 

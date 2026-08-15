@@ -36,35 +36,14 @@ rescue LoadError
         "logic-placement rule from .highball/checks.yml."
 end
 
+# Shared with every other check in this pack; see lib/changed_files.rb
+# for why this is no longer copied into each script.
+require_relative "../lib/changed_files"
+
 WRITE_CALL = /\.(?:save!?|update!?|create!?|destroy!?|upsert|insert_all!?|update_all|destroy_all|delete_all)\b/
 ENQUEUE_CALL = /\b(?:deliver_now|deliver_later|perform_now|perform_later|perform_async)\b/
 TRANSACTION = /\btransaction\b/
 MAX_METHOD_LINES = 15
-
-def ref_exists?(ref)
-  system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
-end
-
-# Intentionally duplicated across the check-* scripts (not extracted
-# to a lib): each script must stay a self-contained single file so
-# sibling repos can take verbatim copies.
-def changed_files
-  # The runner computes this once on the host and hands it down, so a rule
-  # running inside a container needs neither git nor repo history. Empty or
-  # absent means "unknown" -- fall back to asking git ourselves.
-  provided = ENV["HIGHBALL_CHANGED_FILES"].to_s
-  unless provided.strip.empty?
-    return provided.lines.map(&:strip).reject(&:empty?).uniq
-  end
-
-  parts = [ `git diff --name-only`, `git ls-files --others --exclude-standard` ]
-  if ref_exists?("HEAD")
-    parts << `git diff --name-only --cached`
-    base = %w[origin/main main origin/master master].find { |ref| ref_exists?(ref) }
-    parts << `git diff --name-only #{`git merge-base #{base} HEAD`.strip} HEAD` if base
-  end
-  parts.flat_map(&:lines).map(&:strip).uniq
-end
 
 # The pragma counts anywhere in the contiguous comment block above the
 # def — placement exceptions deserve real justifications.
@@ -102,7 +81,7 @@ models = Dir.glob("app/models/**/*.rb") +
          Dir.glob("engines/*/app/models/**/*.rb")
 
 if ARGV.include?("--changed-only")
-  changed = changed_files
+  changed = Highball.changed_files
   controllers &= changed
   models &= changed
 end

@@ -25,6 +25,7 @@
   "files": [
     "bin",
     "checks",
+    "lib",
     "rubrics",
     "template",
     "README.md"

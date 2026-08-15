@@ -25,6 +25,24 @@ test("install vendors every check and rubric into the repo", () => {
   assert.deepEqual(checks.sort(), shipped.sort());
   assert.ok(checks.includes("check-spec-hygiene"));
   assert.ok(existsSync(join(dir, ".highball/packs/rails/rubrics/architecture.md")));
+
+  // The checks require_relative into lib/, so vendoring checks/ without it
+  // would produce a directory of scripts that all die on load.
+  assert.ok(existsSync(join(dir, ".highball/packs/rails/lib/changed_files.rb")));
+});
+
+test("a vendored check runs from its installed location", () => {
+  const { dir } = installInto();
+
+  // The real failure mode of extracting a shared lib is a require_relative
+  // that resolves in the source tree but not in the vendored one. Only
+  // running an installed copy proves it — a syntax check would not.
+  const out = execFileSync(
+    join(dir, ".highball/packs/rails/checks/check-migrations"),
+    [ "--changed-only" ],
+    { cwd: dir, encoding: "utf8", env: { ...process.env, HIGHBALL_CHANGED_FILES: "" } }
+  );
+  assert.match(out, /0 offense\(s\)/);
 });
 
 test("vendored checks are executable, so checks.yml can name them directly", () => {
