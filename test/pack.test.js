@@ -65,6 +65,24 @@ test("install prints the rules snippet, and it is valid YAML", () => {
   assert.deepEqual(parsed.split(","), [ "spec-hygiene", "spec-pairing", "comment-standards" ]);
 });
 
+test("every rubric declares the language policy the runner judges by", () => {
+  for (const file of readdirSync(join(ROOT, "rubrics"))) {
+    const text = readFileSync(join(ROOT, "rubrics", file), "utf8");
+    const match = /^---\n([\s\S]*?)\n---\n/.exec(text);
+    assert.ok(match, `${file} is missing YAML front matter`);
+
+    // Without `include`, the runner would bundle every changed file — sending
+    // HAML and JSON to a judge that only has opinions about Ruby.
+    const meta = execFileSync("ruby", [
+      "-ryaml", "-rjson", "-e", 'puts YAML.safe_load($stdin.read).to_json'
+    ], { input: match[1], encoding: "utf8" });
+    const parsed = JSON.parse(meta);
+
+    assert.equal(parsed.include, "**/*.rb");
+    assert.ok(Array.isArray(parsed.exclude) && parsed.exclude.includes("db/"));
+  }
+});
+
 test("every shipped check is syntactically valid Ruby", () => {
   for (const file of readdirSync(join(ROOT, "checks"))) {
     execFileSync("ruby", [ "-c", join(ROOT, "checks", file) ], { stdio: "pipe" });

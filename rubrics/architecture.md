@@ -1,3 +1,11 @@
+---
+# The only language-specific part of an AI rule. The runner supplies the
+# engine; this front matter tells it which of the changed files are Ruby and
+# which trees are generated or vendored rather than authored.
+include: "**/*.rb"
+exclude: [db/, bin/, config/, node_modules/, vendor/]
+---
+
 # Architecture & naming — the judgment half of house standards
 
 Deterministic checks handle file placement and markup shape; this rubric

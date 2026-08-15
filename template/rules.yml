@@ -82,15 +82,17 @@ checks:
   #   fast: true
 
   # --- AI-judged rules -----------------------------------------------------
-  # ai-check hands changed files plus a rubric to headless Claude. Never
-  # `fast` — LLM latency (and cost) belongs at turn end, not on every edit.
-  # Requires the `claude` CLI on the machine, so mark these `exec: host` in a
-  # containerized repo.
+  # `rubric:` instead of `run:` — the runner (>= 0.4.0) bundles the changed
+  # files the rubric asks for, hands them to headless Claude, and applies the
+  # same pass/fail contract as every other rule. It needs the `claude` CLI,
+  # which the runner takes care of by always judging host-side; no `exec:
+  # host` needed even in a containerized repo. These never join a fast run,
+  # so there is nothing to mark: the runner drops them from `--fast`.
 
   # - id: comment-quality
   #   name: Comment quality (AI)
-  #   run: .highball/packs/rails/checks/ai-check .highball/packs/rails/rubrics/comment-quality.md
+  #   rubric: .highball/packs/rails/rubrics/comment-quality.md
 
   # - id: architecture-quality
   #   name: Architecture & naming (AI)
-  #   run: .highball/packs/rails/checks/ai-check .highball/packs/rails/rubrics/architecture.md
+  #   rubric: .highball/packs/rails/rubrics/architecture.md
