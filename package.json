@@ -39,5 +39,10 @@
   "peerDependencies": {
     "@profoundry-us/highball": ">=0.4.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "peerDependenciesMeta": {
+    "@profoundry-us/highball": {
+      "optional": true
+    }
+  }
 }
