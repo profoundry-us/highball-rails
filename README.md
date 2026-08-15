@@ -1,8 +1,8 @@
 # @profoundry-us/highball-rails
 
 The Rails check pack for [Highball](https://github.com/profoundry-us/highball-runner):
-Prism-based analyzers and AI rubrics for Rails codebases, vendored into your
-repo and executed by the Highball runner.
+Ruby analyzers and AI rubrics for Rails codebases, vendored into your repo and
+executed by the Highball runner.
 
 The runner is a generic orchestrator — it runs whatever `.highball/checks.yml`
 names, in whatever language. This pack is the Rails *content*: the rules that
@@ -55,7 +55,7 @@ The printed rules come in tiers:
 | 2 | comment standards, UUID migrations, gem why-comments | House conventions; enable what you share |
 | 3 | logic placement, tenancy | Strong architectural opinions (ActiveInteraction, org-scoped multi-tenancy) — read the script first |
 | 4 | component usage, UI standards | LocoMotion-specific |
-| AI | comment quality, architecture & naming | Headless Claude against a rubric; never `fast` — costs latency and tokens |
+| AI | comment quality, architecture & naming | `rubric:` rules judged by headless Claude; the runner keeps them off the fast path |
 
 Only tier 1 is uncommented in the template. A rule your codebase doesn't
 already believe will fail on day one and teach everyone to ignore the
@@ -69,10 +69,27 @@ runner via `HIGHBALL_CHANGED_FILES`, so `--changed-only` rules work inside a
 container with no repo history. They fall back to asking git directly when
 that variable is absent, so they still work when run by hand.
 
-They need **Ruby** (they use Prism, which ships with Ruby 3.3+). In a
-containerized repo, that means they run wherever your `exec.via` sends them —
-except the AI rules, which need the `claude` CLI and should be marked
-`exec: host`.
+They need **Ruby**, and most of them need nothing else — they are text and
+regex scans over the files the runner names. Two are parser-based and need
+**Ruby 3.3+**, where Prism ships in the standard library:
+
+- `check-comments` walks the syntax tree to pair each class and module with
+  the comments directly above it, which is how it can tell that a module whose
+  whole body is one class is just namespacing and shouldn't be commented.
+- `check-logic-placement` uses real method line spans, so "too long" and
+  "opens a transaction in a controller" are measured, not guessed from
+  indentation.
+
+On older Ruby those two abort with an explanation naming the rule to remove;
+the other seven are unaffected. In a containerized repo, all of them run
+wherever your `exec.via` sends them.
+
+The AI rubrics are not scripts at all. Since runner 0.4.0 they are declared
+with `rubric:` instead of `run:`, and the runner judges them itself — always
+host-side, since it is the `claude` CLI that has to be reachable, and never on
+the `--fast` path. Each rubric's front matter carries the only Ruby-specific
+part (`include: "**/*.rb"` and the generated/vendored trees to skip), so the
+opinions stay here in the pack while the machinery stays in the runner.
 
 ## The `--changed-only` ratchet
 

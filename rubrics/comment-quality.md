@@ -1,7 +1,14 @@
+---
+# The only language-specific part of an AI rule. The runner supplies the
+# engine; this front matter tells it which of the changed files are Ruby and
+# which trees are generated or vendored rather than authored.
+include: "**/*.rb"
+exclude: [db/, bin/, config/, node_modules/, vendor/]
+---
+
 # Comment quality — the judgment half of comment standards
 
-.highball/bin/check-comments enforces presence and shape deterministically;
-this
+The check-comments rule enforces presence and shape deterministically; this
 rubric judges what a regex can't: whether comments earn their place.
 
 A comment VIOLATES this rubric when it:

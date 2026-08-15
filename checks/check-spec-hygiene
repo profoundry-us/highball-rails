@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-spec-hygiene — no focused specs make it past a turn: a
+# check-spec-hygiene — no focused specs make it past a turn: a
 # committed fit/fdescribe/:focus silently shrinks the suite to one
 # example and everything else "passes" by not running. Cheap full scan;
 # no changed-only mode because a focus anywhere poisons every run.

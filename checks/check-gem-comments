@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-gem-comments — every gem line in the Gemfile needs a comment
+# check-gem-comments — every gem line in the Gemfile needs a comment
 # above (or trailing) saying WHY the dependency exists. The house
 # Gemfiles already read this way; this keeps agents from slipping in a
 # bare `gem "something"` whose reason evaporates by next month. The

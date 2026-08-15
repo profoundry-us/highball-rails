@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-migrations — UUID primary keys everywhere, enforced at the
+# check-migrations — UUID primary keys everywhere, enforced at the
 # migration level: one forgotten `id: :uuid` (or an untyped reference to
 # a uuid table) is a painless one-line fix today and a data-migration
 # project after real rows exist. Changed-only by default in checks.yml —
@@ -10,33 +10,12 @@
 # Escape hatch: `hb:allow` on the line or the line above (e.g. a join
 # table to an external integer-keyed system).
 
-def ref_exists?(ref)
-  system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
-end
-
-# Intentionally duplicated across the bin/check-* scripts (not extracted
-# to a lib): each script must stay a self-contained single file so
-# sibling repos can take verbatim copies.
-def changed_files
-  # The runner computes this once on the host and hands it down, so a rule
-  # running inside a container needs neither git nor repo history. Empty or
-  # absent means "unknown" -- fall back to asking git ourselves.
-  provided = ENV["HIGHBALL_CHANGED_FILES"].to_s
-  unless provided.strip.empty?
-    return provided.lines.map(&:strip).reject(&:empty?).uniq
-  end
-
-  parts = [ `git diff --name-only`, `git ls-files --others --exclude-standard` ]
-  if ref_exists?("HEAD")
-    parts << `git diff --name-only --cached`
-    base = %w[origin/main main origin/master master].find { |ref| ref_exists?(ref) }
-    parts << `git diff --name-only #{`git merge-base #{base} HEAD`.strip} HEAD` if base
-  end
-  parts.flat_map(&:lines).map(&:strip).uniq
-end
+# Shared with every other check in this pack; see lib/changed_files.rb
+# for why this is no longer copied into each script.
+require_relative "../lib/changed_files"
 
 files = Dir.glob("db/migrate/*.rb")
-files &= changed_files if ARGV.include?("--changed-only")
+files &= Highball.changed_files if ARGV.include?("--changed-only")
 
 offenses = []
 

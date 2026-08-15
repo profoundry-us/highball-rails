@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# bin/check-spec-pairing — the "required test types present" rule, real at
+# check-spec-pairing — the "required test types present" rule, real at
 # last: every changed model, interaction, component, and controller must
 # have its paired spec file. The spec only has to EXIST — content quality
 # is the suite's job — because the failure mode this catches is the agent
@@ -15,30 +15,9 @@
 # Run with --changed-only (the checks.yml default — this rule is a
 # ratchet by nature); bare runs report the whole backlog.
 
-def ref_exists?(ref)
-  system("git rev-parse -q --verify #{ref}", out: File::NULL, err: File::NULL)
-end
-
-# Intentionally duplicated across the bin/check-* scripts (not extracted
-# to a lib): each script must stay a self-contained single file so
-# sibling repos can take verbatim copies.
-def changed_files
-  # The runner computes this once on the host and hands it down, so a rule
-  # running inside a container needs neither git nor repo history. Empty or
-  # absent means "unknown" -- fall back to asking git ourselves.
-  provided = ENV["HIGHBALL_CHANGED_FILES"].to_s
-  unless provided.strip.empty?
-    return provided.lines.map(&:strip).reject(&:empty?).uniq
-  end
-
-  parts = [ `git diff --name-only`, `git ls-files --others --exclude-standard` ]
-  if ref_exists?("HEAD")
-    parts << `git diff --name-only --cached`
-    base = %w[origin/main main origin/master master].find { |ref| ref_exists?(ref) }
-    parts << `git diff --name-only #{`git merge-base #{base} HEAD`.strip} HEAD` if base
-  end
-  parts.flat_map(&:lines).map(&:strip).uniq
-end
+# Shared with every other check in this pack; see lib/changed_files.rb
+# for why this is no longer copied into each script.
+require_relative "../lib/changed_files"
 
 EXEMPT = %r{/(?:application_|base_)|/concerns/}
 
@@ -56,7 +35,7 @@ end
 
 files =
   if ARGV.include?("--changed-only")
-    changed_files
+    Highball.changed_files
   else
     Dir.glob("app/{models,interactions,components,controllers}/**/*.rb") +
       Dir.glob("engines/*/app/{models,interactions,components,controllers}/**/*.rb")

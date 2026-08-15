@@ -25,6 +25,24 @@ test("install vendors every check and rubric into the repo", () => {
   assert.deepEqual(checks.sort(), shipped.sort());
   assert.ok(checks.includes("check-spec-hygiene"));
   assert.ok(existsSync(join(dir, ".highball/packs/rails/rubrics/architecture.md")));
+
+  // The checks require_relative into lib/, so vendoring checks/ without it
+  // would produce a directory of scripts that all die on load.
+  assert.ok(existsSync(join(dir, ".highball/packs/rails/lib/changed_files.rb")));
+});
+
+test("a vendored check runs from its installed location", () => {
+  const { dir } = installInto();
+
+  // The real failure mode of extracting a shared lib is a require_relative
+  // that resolves in the source tree but not in the vendored one. Only
+  // running an installed copy proves it — a syntax check would not.
+  const out = execFileSync(
+    join(dir, ".highball/packs/rails/checks/check-migrations"),
+    [ "--changed-only" ],
+    { cwd: dir, encoding: "utf8", env: { ...process.env, HIGHBALL_CHANGED_FILES: "" } }
+  );
+  assert.match(out, /0 offense\(s\)/);
 });
 
 test("vendored checks are executable, so checks.yml can name them directly", () => {
@@ -63,6 +81,36 @@ test("install prints the rules snippet, and it is valid YAML", () => {
   // Only the universally-true rules ship enabled; the rest are commented out
   // so adopters opt in deliberately.
   assert.deepEqual(parsed.split(","), [ "spec-hygiene", "spec-pairing", "comment-standards" ]);
+});
+
+test("every rubric declares the language policy the runner judges by", () => {
+  for (const file of readdirSync(join(ROOT, "rubrics"))) {
+    const text = readFileSync(join(ROOT, "rubrics", file), "utf8");
+    const match = /^---\n([\s\S]*?)\n---\n/.exec(text);
+    assert.ok(match, `${file} is missing YAML front matter`);
+
+    // Without `include`, the runner would bundle every changed file — sending
+    // HAML and JSON to a judge that only has opinions about Ruby.
+    const meta = execFileSync("ruby", [
+      "-ryaml", "-rjson", "-e", 'puts YAML.safe_load($stdin.read).to_json'
+    ], { input: match[1], encoding: "utf8" });
+    const parsed = JSON.parse(meta);
+
+    assert.equal(parsed.include, "**/*.rb");
+    assert.ok(Array.isArray(parsed.exclude) && parsed.exclude.includes("db/"));
+  }
+});
+
+test("checks that need Prism say so instead of dying on a LoadError", () => {
+  for (const file of readdirSync(join(ROOT, "checks"))) {
+    const source = readFileSync(join(ROOT, "checks", file), "utf8");
+    if (!source.includes('require "prism"')) continue;
+
+    // Prism is the pack's only dependency beyond plain Ruby (3.3+). A repo on
+    // an older Ruby should be told which rule to drop, not handed a backtrace.
+    assert.match(source, /rescue LoadError/, `${file} requires Prism unguarded`);
+    assert.match(source, /Ruby 3\.3\+/, `${file} does not name the version floor`);
+  }
 });
 
 test("every shipped check is syntactically valid Ruby", () => {
