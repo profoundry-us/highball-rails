@@ -98,6 +98,11 @@ test("every rubric declares the language policy the runner judges by", () => {
 
     assert.equal(parsed.include, "**/*.rb");
     assert.ok(Array.isArray(parsed.exclude) && parsed.exclude.includes("db/"));
+
+    // The pack vendors itself into .highball/, and since 0.2.0 it ships .rb
+    // files there. Without this the judge bills the adopter for reviewing the
+    // pack's own source against the adopter's house rubric.
+    assert.ok(parsed.exclude.includes(".highball/"), `${file} would judge the pack itself`);
   }
 });
 

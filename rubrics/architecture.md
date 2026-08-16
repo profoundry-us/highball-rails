@@ -3,7 +3,7 @@
 # engine; this front matter tells it which of the changed files are Ruby and
 # which trees are generated or vendored rather than authored.
 include: "**/*.rb"
-exclude: [db/, bin/, config/, node_modules/, vendor/]
+exclude: [db/, bin/, config/, node_modules/, vendor/, .highball/]
 ---
 
 # Architecture & naming — the judgment half of house standards
