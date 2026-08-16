@@ -38,9 +38,10 @@ OptionParser.new do |opts|
 end.parse!
 
 # db/ is generated schema + migrations (migration classes are named after
-# what they do); bin/ and config/ are framework boilerplate. Comment
-# standards apply to the code we actually author.
-EXCLUDED_PREFIXES = %w[db/ bin/ config/ node_modules/ vendor/].freeze
+# what they do); bin/ and config/ are framework boilerplate; .highball/ is
+# this pack's own vendored code. Comment standards apply to the code we
+# actually author.
+EXCLUDED_PREFIXES = %w[db/ bin/ config/ node_modules/ vendor/ .highball/].freeze
 
 files = (options[:changed_only] ? Highball.changed_files : Highball.all_files)
         .select { |path| path.end_with?(".rb") && File.exist?(path) }
