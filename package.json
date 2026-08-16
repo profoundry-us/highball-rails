@@ -1,6 +1,6 @@
 {
   "name": "@profoundry-us/highball-rails",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Rails check pack for Highball — Ruby analyzers and AI rubrics for Rails codebases, vendored into your repo and run by the Highball runner.",
   "keywords": [
     "highball",

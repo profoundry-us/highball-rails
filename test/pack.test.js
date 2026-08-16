@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, existsSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, existsSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,6 +50,19 @@ test("vendored checks are executable, so checks.yml can name them directly", () 
   const path = join(dir, ".highball/packs/rails/checks/check-spec-hygiene");
 
   assert.ok(statSync(path).mode & 0o111, "expected the executable bit");
+});
+
+test("install removes checks the pack no longer ships", () => {
+  const { dir } = installInto();
+  const stale = join(dir, ".highball/packs/rails/checks/check-retired");
+  writeFileSync(stale, "#!/usr/bin/env ruby\n");
+
+  execFileSync(process.execPath, [ CLI, "install" ], { cwd: dir, encoding: "utf8" });
+
+  // A stale script is worse than a missing one: it keeps working, so a
+  // checks.yml can go on naming a rule the pack has dropped — until someone
+  // installs into a clean tree and the rule dies with "command not found".
+  assert.ok(!existsSync(stale), "expected the retired check to be pruned");
 });
 
 test("install stamps the version and reports an upgrade on re-run", () => {

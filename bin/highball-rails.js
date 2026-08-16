@@ -7,7 +7,7 @@
 //   npx @profoundry-us/highball-rails install   # vendor + print rules
 //   npx @profoundry-us/highball-rails rules     # print rules only
 import {
-  chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync
+  chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +39,11 @@ function install() {
   // lib/ travels with the checks: they `require_relative "../lib/..."`, so a
   // vendored checks/ without it is a directory of scripts that all die on load.
   for (const dir of [ "checks", "lib", "rubrics" ]) {
+    // Replace rather than copy over. A plain copy leaves behind files the pack
+    // has since deleted, and a stale script is worse than a missing one: it
+    // keeps working, so a checks.yml can go on naming a rule this pack no
+    // longer ships — right up until someone installs into a clean tree.
+    rmSync(join(DEST, dir), { recursive: true, force: true });
     cpSync(join(PACK_ROOT, dir), join(DEST, dir), { recursive: true });
   }
   // Vendored scripts arrive executable so checks.yml can name them directly.
