@@ -1,6 +1,6 @@
 # @profoundry-us/highball-rails
 
-The Rails check pack for [Highball](https://github.com/profoundry-us/highball-runner):
+The Rails check pack for [Highball](https://github.com/profoundry-us/highball):
 Ruby analyzers and AI rubrics for Rails codebases, vendored into your repo and
 executed by the Highball runner.
 
