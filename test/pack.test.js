@@ -116,6 +116,10 @@ test("every rubric declares the language policy the runner judges by", () => {
     // files there. Without this the judge bills the adopter for reviewing the
     // pack's own source against the adopter's house rubric.
     assert.ok(parsed.exclude.includes(".highball/"), `${file} would judge the pack itself`);
+    // A pack rubric judges what the branch touched, not every old line of
+    // every file it touched: otherwise one edit makes pre-existing offenses
+    // blocking, and a stale comment that predates the branch fails the turn.
+    assert.equal(parsed.scope, "changed", `${file} should enforce only on changed lines`);
   }
 });
 

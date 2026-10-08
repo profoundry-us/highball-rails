@@ -91,6 +91,13 @@ the `--fast` path. Each rubric's front matter carries the only Ruby-specific
 part (`include: "**/*.rb"` and the generated/vendored trees to skip), so the
 opinions stay here in the pack while the machinery stays in the runner.
 
+Both rubrics also set `scope: changed`, the AI half of the
+`--changed-only` ratchet below: the judge reads whole files for context but
+the runner enforces only on the lines your branch touched, so an old
+offense in a file you edited doesn't block the turn. That needs runner
+0.9.0 or later; earlier runners ignore the key and judge whole files, as
+they always have.
+
 ## The `--changed-only` ratchet
 
 Several rules accept `--changed-only`, which limits the scan to files the
