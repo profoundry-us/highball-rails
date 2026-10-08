@@ -4,6 +4,11 @@
 # which trees are generated or vendored rather than authored.
 include: "**/*.rb"
 exclude: [db/, bin/, config/, node_modules/, vendor/, .highball/]
+# Enforce only on the lines the branch touched. The judge still reads whole
+# files for context, but an old offense in a file you edited no longer
+# blocks the turn — the same ratchet the --changed-only checks apply.
+# Needs runner 0.9.0+; earlier runners ignore it and judge whole files.
+scope: changed
 ---
 
 # Architecture & naming — the judgment half of house standards
